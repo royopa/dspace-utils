@@ -12,13 +12,21 @@ DECLARE
 	item_collection_id int;
 	text_return        text;
 BEGIN
-	SELECT INTO item_collection_id resource_id FROM handle WHERE handle = handle_parameter AND resource_type_id = 3;
+	SELECT INTO item_collection_id 
+		resource_id 
+	FROM 
+		handle
+	WHERE
+		handle = handle_parameter AND resource_type_id = 3;
+	
 	RAISE NOTICE 'collection_id = %', item_collection_id;
+
 	IF item_collection_id IS NULL THEN 
 		RAISE NOTICE 'Erro, nenhuma coleção encontrada com o handle %', handle_parameter;
 		text_return := 'No collection found with handle informed.';
 	ELSE
 		RAISE NOTICE 'removing items from table metadatavalue';
+
 		DELETE FROM 
 			metadatavalue
 		WHERE
@@ -30,7 +38,9 @@ BEGIN
 				WHERE
 					collection_id = item_collection_id
 			);
+
 		RAISE NOTICE 'removing items from table communities2item';
+			
 		DELETE FROM 
 			communities2item
 		WHERE
@@ -42,7 +52,9 @@ BEGIN
 				WHERE
 					collection_id = item_collection_id
 			);
+
 		RAISE NOTICE 'removing items from table collection2item';
+
 		DELETE FROM 
 			collection2item
 		WHERE
@@ -54,7 +66,9 @@ BEGIN
 				WHERE
 					collection_id = item_collection_id
 			);
+
 		RAISE NOTICE 'removing itens from table workspaceitem';
+
 		DELETE FROM 
 			workspaceitem
 		WHERE
@@ -68,6 +82,7 @@ BEGIN
 			);
 
 		RAISE NOTICE 'removing items from table item2bundle';
+
 		DELETE FROM 
 			item2bundle 
 		WHERE
@@ -80,6 +95,7 @@ BEGIN
 					collection_id = item_collection_id
 				)
 		;
+
 		DELETE FROM 
 			item
 		WHERE
