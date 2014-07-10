@@ -12,14 +12,14 @@ Or both: <theme name=" Theme's name" regex="browse-title^" handle="123456789/42"
 
 
 -------------------------------------------------------------------------
-Logo página Dspace
+Logo da página Dspace - Tema Mirage
 -------------------------------------------------------------------------
 Alteração do arquivo css 
-C:\dspace\webapps\xmlui\themes\custom-theme\lib\css\style.css
+[dspace]/webapps/xmlui/themes/Mirage/lib/css/style.css
 de: dspace-logo-only.png para: logo_portal.gif
 
 Alterar o texto "mirage" no arquivo
-C:\dspace\webapps\xmlui\themes\custom-theme\lib\xsl\core\page-structure.xsl
+[dspace]/webapps/xmlui/themes/Mirage/lib/xsl/core/page-structure.xsl
 
 -------------------------------------------------------------------------
 Imagens estáticas
