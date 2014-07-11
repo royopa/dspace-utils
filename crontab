@@ -1,0 +1,110 @@
+#################################
+# DSpace cron jobs
+# 
+# This file defines all of the cron jobs that
+# are run on a nightly, weekly or monthly basis
+# for the DSpace Demo service.
+#################################
+
+######################
+# Initialize Environment Variables
+######################
+#Ensure that HOME is set properly for our service
+HOME=/home/dspace
+
+#Add Java to PATH (for all DSpace cron jobs)
+#Also add all major 'bin' directories
+PATH=/usr/bin:/bin:/usr/local/bin
+
+#Specify default Java options (for all DSpace cron jobs)
+JAVA_OPTS=-Xmx512M -Xms512M -Dfile.encoding=UTF-8
+
+#############
+# Hourly
+#############
+# Regenerate System Sitemaps every 8 hours
+# at 3 minutes past the hour
+3  0,8,16 * * * $HOME/dspace/bin/dspace generate-sitemaps > /dev/null
+
+# Reset DSpace demo passwords every twenty minutes to 'dspace'
+18,38,58 * * * * $HOME/bin/reset-dspace-passwords > /dev/null
+
+#############
+# Nightly
+#############
+# 12:00AM
+# Remove any YourKit Snapshots more than 5 days old
+01 0 * * * find /tmp/Snapshots/*.snapshot -mtime +5 -exec rm {} \;
+# Reset any changes made to "News" sections of DSpace homepages 
+05 0 * * * cp $HOME/dspace-src/dspace/config/news-* $HOME/dspace/config/ > /dev/null
+
+# 12:30AM
+# Run DSpace statistical analysis tools (12months takes approx 40secs)
+30 0 * * * $HOME/dspace/bin/dspace stat-general
+35 0 * * * $HOME/dspace/bin/dspace stat-monthly
+
+# 1:00AM
+# Generate DSpace statistical analysis reports
+00 1 * * * $HOME/dspace/bin/dspace stat-report-general
+05 1 * * * $HOME/dspace/bin/dspace stat-report-monthly
+
+# 2:00AM
+# Run the DSpace media filter scripts and save all output to a log file
+# (Creates image thumbnails, indexes full text, and 
+# performs any automated format conversions)
+0 2 * * * $HOME/dspace/bin/dspace filter-media > $HOME/dspace/log/mediafilter/filter.log 2>&1
+
+# 5:00AM
+# Check for items to release from embargo in DSpace.  
+0 5 * * * $HOME/dspace/bin/dspace embargo-lifter > $HOME/dspace/log/embargo/release.log 2>&1
+
+# 6:00AM
+# Run XOAI incremental import (and optimization)
+0 6 * * * $HOME/dspace/bin/dspace oai import -o > /dev/null
+
+# 6:30AM
+# Clean & Update Discovery Solr Index
+30 6 * * * $HOME/dspace/bin/dspace index-discovery
+# Cleanup Web Spiders from DSpace Statistics Solr Index
+# -i deletes all spiders matched by IP address, DNS name or Agent name
+30 6 * * * $HOME/dspace/bin/dspace stats-util -i
+
+# 7:00AM
+# Optimize Discovery Solr Index
+0 7 * * * $HOME/dspace/bin/dspace index-discovery -o
+# Optimize DSpace Statistics Solr Index
+0 7 * * * $HOME/dspace/bin/dspace stats-util -o
+
+# 8:00AM
+# Send out DSpace subscription emails
+# (This alerts users of newly deposited items of interest)
+0 8 * * * $HOME/dspace/bin/dspace sub-daily > /dev/null
+
+
+##############
+# Weekly
+##############
+# 23:59 (11:59PM) every Saturday night
+# Reset all DSpace content back to what is in ~/AIP-restore/
+# DISABLE THIS FOR TESTATHON!
+59 23 * * 6 $HOME/bin/reset-dspace-content -n > $HOME/AIP-restore/reset-dspace-content.log 2>&1
+
+##############
+# Monthly
+##############
+# 12:01AM
+# Remove all DSpace/Tomcat log files which are more than 30 days old
+# on the first of every month
+01 0 1 * * find $HOME/dspace/log/*.log.* -mtime +30 -exec rm {} \;
+01 0 1 * * find $HOME/tomcat/logs/*.log -mtime +30 -exec rm {} \;
+
+# 1:00AM
+# Completely remove any deleted bitstreams in DSpace
+# on the first of every month
+0 1 1 * * $HOME/dspace/bin/dspace cleanup > /dev/null
+
+# 2:00AM
+# Delete any ~/dspace/config/*/*.old files more than 30 days old (created by "ant update")
+0 2 1 * * find $HOME/dspace/config -name "*-*-*.old" -mtime +30 -exec rm {} \;
+# Delete any ~/dspace/*.bak-*-*/ directories more than 30 days old (created by "ant update")
+0 2 1 * * find $HOME/dspace/*.bak-*-* -maxdepth 0 -type d -mtime +30 -exec rm -rf {} \;
