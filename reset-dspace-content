@@ -1,0 +1,308 @@
+#!/bin/bash
+# RESET DSPACE CONTENT SCRIPT
+#
+# -------------------------------------------------------------------
+# WARNING: BEFORE RUNNING THIS SCRIPT YOU MUST GENERATE A SET OF AIPS
+# USING THE DSPACE AIP BACKUP/RESTORE TOOLS:
+# https://wiki.duraspace.org/display/DSDOC18/AIP+Backup+and+Restore
+#
+# Specifically, you would need to export an ENTIRE SITE, by running
+# something similar to:
+# dspace packager -d -a -t AIP -e [admin-email] -i 10673/0 -o includeBundles=ORIGINAL,LICENSE -o passwords=true SITE@10673-0.zip
+# -------------------------------------------------------------------
+#
+# This script does the following:
+# 1. Stops Tomcat
+# 2. Backs up current DB & Assetstore to "$BACKUP_DIR"
+# 3. Deletes existing DB & Assetstore
+# 4. Resets DSpace back to a 'fresh-install' state.
+# 5. Imports the AIPs in "$AIP_DIR" into DSpace as default content 
+#   (This also autocreates several epeople and groups)
+#    SEE README in ~/AIP-restore/ for info on updating these AIPs
+# 6. Refreshes all Indexes & Restarts Tomcat
+
+###################
+## GLOBAL VARIABLES
+###################
+HOME="/home/dspace"
+
+# Load current user's profile/environment
+if [ -r $HOME/.profile ]; then
+   echo "Loading user environment from $HOME/.profile";
+   source $HOME/.profile
+fi
+
+# Location of final backup before destroying all content (~/tmp/data-backup)
+BACKUP_DIR="$HOME/tmp/data-backup"
+
+# Location of AIPs to restore
+AIP_DIR="$HOME/AIP-restore"
+
+# Name of the main "SITE" AIP
+SITE_AIP_NAME="SITE@10673-0.zip"
+
+# Initial Admin email
+ADMIN_EMAIL="dspacedemo+admin@gmail.com"
+
+# Extra PostgreSQL variables (needed to restart PostgreSQL easily)
+PGCTL="$POSTGRES_HOME/bin/pg_ctl"
+PGLOG="$PGDATA/serverlog"
+
+###################
+## GLOBAL FUNCTIONS
+###################
+# Check for error function (exits when error occurs)
+checkerr()
+{
+  #if previous command returns non-zero result, exit with an error.
+  if [ $? != 0 ]; then
+		# TODO: Should this send an email??
+		# Perhaps using 'mailx'? (sudo apt-get install heirloom-mailx)
+		echo ""
+        	echo "ERROR OCCURRED! (see above)";
+		echo " Unable to continue with 'reset' of DSpace content."
+		echo " WARNING: DSpace may be in an unstable state!!!!!"
+		echo ""
+		echo " A backup of the data prior to this 'reset' is available at"
+		echo " $BACKUP_DIR"
+		echo " You should be able to restore that data by doing the following..." 
+		echo "    1. dropdb dspace"
+		echo "    2. createdb -U dspace -E UNICODE dspace"
+		echo "    3. psql -U dspace dspace < $BACKUP_DIR/pg_dump.sql"
+		echo "    4. mv $HOME/dspace/assetstore $HOME/dspace/assetstore.BAK"
+		echo "    5. mv $BACKUP_DIR/assetstore $HOME/dspace/assetstore"
+
+        exit $?;
+  fi
+}
+
+
+# If -n flag passed in, then this script runs in "non-interactive" mode
+if [ "$1" != "-n" ]; then
+    echo ""
+    echo "This script will REMOVE *ALL* CONTENT from DSpace running on demo.dspace.org"
+    echo "and REPLACE it with the contents of the AIPs in $AIP_DIR."
+    echo "  (NOTE: If you wish to skip this message in the future, pass the '-n' flag"
+    echo "   into this script, which causes it to run in non-interactive mode)"
+    echo ""
+    echo -n "Are you sure you want to continue? (y/n) " 
+    read -e CONTINUE
+
+    if [ $CONTINUE != "Y" -a $CONTINUE != "y" ]; then
+	echo "Cancelling execution & exiting..."
+	exit 1;
+    fi
+fi
+
+
+echo ""
+echo "====================================================================="
+echo "BEGINNING RESET of DSpace back to the AIP content in $AIP_DIR"
+echo "====================================================================="
+echo "Start Date/Time: `date`"
+START_TIME=`date +%s`
+echo ""
+
+
+# --------------------------------------
+# Step 1 : Stop Tomcat & reboot Postgres
+# --------------------------------------
+sudo service tomcat stop
+checkerr
+
+# We reboot Postgres in order to kill any other sessions that may exist
+# We must reboot Postgres WITHOUT using the 'service' (/etc/init.d) script
+# so that we can specify the '-w' (wait) flag.
+echo "Stopping PostgreSQL: "
+# Stop Postgres quickly & wait until completely stopped (-w)
+$PGCTL stop -D "$PGDATA" -s -m fast -w
+checkerr
+echo "ok"
+echo ""
+
+# If Postgres Log file isn't writable, delete & recreate
+# This sometimes happens with the /etc/init.d script if it creates a log owned by root
+if [ ! -w $PGLOG ]; then
+	# The reason we can force remove this file is that it's under our user directory
+	rm -f $PGLOG
+   	touch $PGLOG
+fi
+
+echo "Starting PostgreSQL: "
+# Start Postgres and wait until completely started (-w)
+$PGCTL start -D "$PGDATA" -w >>$PGLOG 2>&1
+checkerr
+echo "ok"
+echo ""
+
+# --------------------------------------
+# Step 2 : One final Backup (just in case)
+# --------------------------------------
+# Perform one last backup to ~/tmp/[date]
+echo "Creating a backup of existing DSpace content"
+
+# If backup directory already exists, delete it
+if [ -d "$BACKUP_DIR" ]; then
+	echo "... Deleting existing $BACKUP_DIR temp directory";
+	rm -rf $BACKUP_DIR
+	checkerr
+fi
+
+echo "... Creating $BACKUP_DIR temp directory"
+mkdir $BACKUP_DIR
+checkerr
+
+echo "... Performing full database dump to $BACKUP_DIR/pg_dump.sql"
+$POSTGRES_HOME/bin/pg_dump -U dspace -E UNICODE dspace > $BACKUP_DIR/pg_dump.sql
+checkerr
+
+echo ""
+
+# --------------------------------------
+# Step 3 : Delete ALL existing content!
+# --------------------------------------
+echo "Removing all DSpace content (files + metadata)"
+
+# Move existing 'assetstore' folder (all content files)
+echo "... Moving existing 'assetstore' to $BACKUP_DIR"
+mv $HOME/dspace/assetstore $BACKUP_DIR
+checkerr
+
+# Drop the existing 'dspace' database 
+echo "... Dropping existing 'dspace' database"
+$POSTGRES_HOME/bin/dropdb -U dspace dspace
+checkerr
+
+echo ""
+
+# --------------------------------------
+# Step 4 : Re-initialize an empty DSpace
+# --------------------------------------
+echo "Resetting DSpace back to a 'fresh-install' state"
+
+# Recreate an empty 'assetstore' folder
+echo "... Creating empty 'assetstore' folder"
+mkdir $HOME/dspace/assetstore
+checkerr
+
+# Recreate an empty 'dspace' database
+echo "... Creating empty 'dspace' database"
+$POSTGRES_HOME/bin/createdb -U dspace -E UNICODE dspace
+checkerr
+
+echo ""
+
+# Add 'dspace' database tables
+echo "... Recreating all necessary DSpace database tables"
+$POSTGRES_HOME/bin/psql -U dspace dspace -f $HOME/dspace/etc/postgres/database_schema.sql
+checkerr
+
+echo ""
+
+echo "... Loading Bitstream Formats Registry"
+$HOME/dspace/bin/dspace registry-loader -bitstream $HOME/dspace/config/registries/bitstream-formats.xml
+checkerr
+
+echo ""
+
+echo "... Loading Dublin Core Registry"
+$HOME/dspace/bin/dspace dsrun org.dspace.administer.MetadataImporter -f $HOME/dspace/config/registries/dublin-core-types.xml
+checkerr
+
+echo ""
+
+echo "... Loading DCTerms Registry"
+$HOME/dspace/bin/dspace dsrun org.dspace.administer.MetadataImporter -f $HOME/dspace/config/registries/dcterms-types.xml
+checkerr
+
+echo ""
+
+echo "... Loading SWORD Metadata Registry"
+$HOME/dspace/bin/dspace dsrun org.dspace.administer.MetadataImporter -f $HOME/dspace/config/registries/sword-metadata.xml
+checkerr
+
+echo ""
+
+echo "... Creating initial administrative user ($ADMIN_EMAIL)"
+$HOME/dspace/bin/dspace create-administrator -e $ADMIN_EMAIL -f Demo -l Administrator -c en -p dspace
+checkerr
+
+echo ""
+
+# ----------------------------------------------
+# Step 5 : Restore entire Site from backup AIPs
+# ----------------------------------------------
+
+echo "Recursively restoring content from AIPs at $AIP_DIR (starting with $SITE_AIP_NAME AIP)"
+# This packager command performs a recursive AIP ingest, starting with the Site AIP
+# * It creates missing metadata fields (createMetadataFields)
+# * It also skips over any "could not find a parent DSpaceObject" errors (skipIfParentMissing)
+# * Finally it runs in following modes:
+#     -u = non-interactive mode
+#     -r = restore mode
+#     -a = all mode (recursive restore)
+#     -f = force replace existing objects
+# For more details see: https://wiki.duraspace.org/display/DSDOC18/AIP+Backup+and+Restore
+$HOME/dspace/bin/dspace packager -u -r -a -f -t AIP -e $ADMIN_EMAIL -i 10673/0 -o skipIfParentMissing=true -o createMetadataFields=true $AIP_DIR/$SITE_AIP_NAME
+checkerr
+
+echo ""
+
+# ----------------------------------------------
+# Step 6 : Re-index content (only necessary for DSpace 3.x and earlier)
+# ----------------------------------------------
+
+#echo "Reindexing all content in DSpace..."
+#$HOME/dspace/bin/dspace index-init
+#checkerr
+
+#echo ""
+
+# --------------------------------------
+# Step 7 : Start up Tomcat
+# --------------------------------------
+sudo service tomcat start
+checkerr
+
+echo ""
+
+# --------------------------------------
+# Step 8 : Rebuild/Reset Discovery indexes
+# --------------------------------------
+echo "Rebuilding Discovery (Solr) Indexes..."
+# Note: the '-f' option tells Discovery to force a reindex of everything and remove docs which no longer exist
+# NOTE: Prior to DSpace 4 this was the "update-discovery-index" script. It has been renamed to "index-discovery"
+$HOME/dspace/bin/dspace index-discovery -f
+checkerr
+
+# --------------------------------------
+# Step 9 : Rebuild/Reset OAI indexes
+# --------------------------------------
+echo "Rebuilding OAI-PMH (Solr) Indexes..."
+# NOTE: the '-c' option clears out existing items in the index. '-o' re-optimizes the index.
+$HOME/dspace/bin/dspace oai import -o -c
+checkerr
+# Also immediately clean the cache
+$HOME/dspace/bin/dspace oai clean-cache
+checkerr
+
+# --------------------------------------
+# Step 10 : Rebuild/Reset Solr Statistics indexes
+# --------------------------------------
+echo "Rebuilding Statistics (Solr) Indexes..."
+# NOTE: the '-b' and '-r' reindex all bitstreams and remove deleted ones. '-o' re-optimizes the index.
+# (Unfortunately these have to be separate calls, as they are mutually exclusive)
+$HOME/dspace/bin/dspace stats-util -b -r
+checkerr
+$HOME/dspace/bin/dspace stats-util -o
+checkerr
+
+echo ""
+echo ""
+echo "SUCCESS! The DSpace 'reset' is now complete!"
+echo ""
+echo "  (However, should you notice any issues, you can restore DSpace to its previous state using the data backup at: $BACKUP_DIR)"
+echo ""
+echo "FINISHED at: `date`"
+END_TIME=`date +%s`
+echo "Elapsed Time: `expr $END_TIME - $START_TIME` seconds"
