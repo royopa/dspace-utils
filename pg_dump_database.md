@@ -5,5 +5,5 @@ pg_dump -a dspace -S dspace -W --role=dspace --username=dspace > dspace_database
 ```
 
 ```
-psql -S -W --host=localhost --dbname=dspace --echo-all --file=dspace.bkp --username=dspace
+psql --host=localhost --dbname=dspace --echo-all --file=dspace.bkp --username=dspace
 ```
