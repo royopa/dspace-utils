@@ -2,6 +2,11 @@
 
 Para configurar o tema a ser utilizado, basta alterar o arquivo xmlui.xconf file, na pasta [dspace]/config.
 
+    <themes>
+        <!-- Example configuration -->
+        <theme name="mirage2" regex=".*" path="mirage2/" />
+    </themes>
+
 Locate the <themes> block inside the xmlui.xconf and add an entry to your own theme there. The theme's location is specified by the path attribute while the set of DSpace pages it applies to can be specified in thee different ways:
 
 With regex pattern: <theme name=" Theme's name" regex="community-list" path=" YourThemeDir /"/>
