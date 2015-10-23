@@ -1,5 +1,10 @@
 ### The command build a pg_dump in database dspace
 
+```sh
+su postgres
+pg_dump -a dspace -S dspace -W --role=postgres --username=postgres > dspace_database.bkp
+```
+
 ```
 pg_dump -a dspace -S dspace -W --role=dspace --username=dspace > dspace_database.bkp
 ```
