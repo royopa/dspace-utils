@@ -1,0 +1,21 @@
+
+
+FrustratedWithFormsDesigner is correct, PL/pgSQL can do this. Here's the script:
+
+CREATE OR REPLACE FUNCTION truncate_tables(username IN VARCHAR) RETURNS void AS $$
+DECLARE
+    statements CURSOR FOR
+        SELECT tablename FROM pg_tables
+        WHERE tableowner = username AND schemaname = 'public';
+BEGIN
+    FOR stmt IN statements LOOP
+        EXECUTE 'TRUNCATE TABLE ' || quote_ident(stmt.tablename) || ' CASCADE;';
+    END LOOP;
+END;
+$$ LANGUAGE plpgsql;
+
+This creates a stored function (you need to do this just once) which you can afterwards use like this:
+
+SELECT truncate_tables('MYUSER');
+
+HTH!
