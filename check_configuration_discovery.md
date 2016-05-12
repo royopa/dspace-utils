@@ -1,11 +1,17 @@
 http://wiki.lib.sun.ac.za/index.php/SUNScholar/Search_Indexes#Check_Config
 
 Check Config
-To check your configuration, run the following:
+------------
 
-$HOME/bin/dspace dsrun org.dspace.discovery.configuration.DiscoveryConfigurationService
-See below for an example output.
+Para checar sua configuração, roda o seguinte comando:
 
+```sh
+sudo /dspace/bin/dspace dsrun org.dspace.discovery.configuration.DiscoveryConfigurationService
+```
+
+Veja um exemplo abaixo da saída do comando:
+
+```code
 79
 default
 Facets:
@@ -53,11 +59,11 @@ Search filters
 Recent submissions configuration:
 	Metadata sort field: dc.date.accessioned
 	Max recent submissions: 30
+```code	
 	
+http://wiki.lib.sun.ac.za/index.php/SUNScholar/Discovery/5.X
 	
-	http://wiki.lib.sun.ac.za/index.php/SUNScholar/Discovery/5.X
-	
-	Step 1 - Define Discovery SOLR service
+Step 1 - Define Discovery SOLR service
 Edit the following file:
 
 nano $HOME/source/dspace/config/modules/discovery.cfg
