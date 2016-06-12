@@ -3,13 +3,13 @@ http://wiki.lib.sun.ac.za/index.php/SUNScholar/Search_Indexes#Check_Config
 Check Config
 ------------
 
-Para checar sua configuração, roda o seguinte comando:
+Para checar sua configuração, roda o seguinte commando:
 
 ```sh
 sudo /dspace/bin/dspace dsrun org.dspace.discovery.configuration.DiscoveryConfigurationService
 ```
 
-Veja um exemplo abaixo da saída do comando:
+Veja um exemplo abaixo da saída do commando:
 
 ```code
 79
