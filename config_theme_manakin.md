@@ -197,7 +197,7 @@ Then simply change them however you want, in my case I just changed the default 
 
 Very simple steps
 Open (in notepad or other text editor) domain.xml located in /glassfish/domains/domain1/config folder.
-Search for 8080 (there should be one occurance only ideally)
+Search for 8080 (there should be one occurrence only ideally)
 Change it to 80 or 8088 or 8090  whatever port no. you like and start the server.
 There is no step 4 
 
